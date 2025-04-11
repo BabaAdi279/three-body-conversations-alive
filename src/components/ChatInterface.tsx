@@ -67,6 +67,27 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setIsTyping(true);
     
     try {
+      // Prepare system message and conversation history
+      const systemMessage = {
+        role: 'system',
+        content: `You are ${character} from the science fiction novel "The Three-Body Problem" by Cixin Liu. 
+        Answer questions in the first person as this character, with knowledge limited to what they would know 
+        in the book. ${getCharacterPersonality(character)} Keep responses concise (under 200 words).`
+      };
+      
+      // Format previous messages for the API
+      const formattedMessages = messages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }));
+      
+      // Add user's current message
+      formattedMessages.push({
+        role: 'user',
+        content: input
+      });
+      
+      // Make API request to Claude
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
@@ -77,21 +98,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         body: JSON.stringify({
           model: 'claude-3-haiku-20240307',
           max_tokens: 1000,
-          messages: [
-            {
-              role: 'system',
-              content: `You are ${character} from the science fiction novel "The Three-Body Problem" by Cixin Liu. 
-              Answer questions in the first person as this character, with knowledge limited to what they would know 
-              in the book. ${getCharacterPersonality(character)} Keep responses concise (under 200 words).`
-            },
-            ...messages,
-            userMessage
-          ]
+          system: systemMessage.content,
+          messages: formattedMessages
         })
       });
       
       if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}`);
+        const errorData = await response.json().catch(() => null);
+        console.error('API Error:', response.status, errorData);
+        throw new Error(`API request failed with status ${response.status}: ${errorData?.error?.message || 'Unknown error'}`);
       }
       
       const data = await response.json();
