@@ -2,8 +2,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, Loader2 } from "lucide-react";
+import { Send, Loader2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface Message {
   role: 'user' | 'assistant';
@@ -29,6 +30,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [showApiInput, setShowApiInput] = useState(!apiKey);
+  const [error, setError] = useState<string | null>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   // Initial message based on character
@@ -42,6 +44,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     if (apiKey) {
       const initialMessage = initialMessages[character] || initialMessages['Ye Wenjie'];
       setMessages([{ role: 'assistant', content: initialMessage }]);
+      setError(null);
     }
   }, [character, apiKey]);
 
@@ -50,7 +53,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, error]);
 
   const handleSendMessage = async () => {
     if (!input.trim()) return;
@@ -65,17 +68,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setInput('');
     setLoading(true);
     setIsTyping(true);
+    setError(null);
     
     try {
-      // Prepare system message and conversation history
-      const systemMessage = {
-        role: 'system',
-        content: `You are ${character} from the science fiction novel "The Three-Body Problem" by Cixin Liu. 
-        Answer questions in the first person as this character, with knowledge limited to what they would know 
-        in the book. ${getCharacterPersonality(character)} Keep responses concise (under 200 words).`
-      };
-      
-      // Format previous messages for the API
+      // Prepare conversation history
       const formattedMessages = messages.map(msg => ({
         role: msg.role,
         content: msg.content
@@ -98,7 +94,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         body: JSON.stringify({
           model: 'claude-3-haiku-20240307',
           max_tokens: 1000,
-          system: systemMessage.content,
+          system: `You are ${character} from the science fiction novel "The Three-Body Problem" by Cixin Liu. 
+                  Answer questions in the first person as this character, with knowledge limited to what they would know 
+                  in the book. ${getCharacterPersonality(character)} Keep responses concise (under 200 words).`,
           messages: formattedMessages
         })
       });
@@ -106,14 +104,38 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
         console.error('API Error:', response.status, errorData);
-        throw new Error(`API request failed with status ${response.status}: ${errorData?.error?.message || 'Unknown error'}`);
+        
+        // Extract more specific error message if available
+        let errorMessage = `API request failed with status ${response.status}`;
+        if (errorData?.error?.message) {
+          errorMessage += `: ${errorData.error.message}`;
+        }
+        
+        throw new Error(errorMessage);
       }
       
       const data = await response.json();
       setMessages(prev => [...prev, { role: 'assistant', content: data.content[0].text }]);
     } catch (error) {
       console.error('Error sending message:', error);
-      toast.error("Failed to get a response. Please check your API key and try again.");
+      
+      let errorMessage = "Failed to get a response. Please check your API key and try again.";
+      
+      if (error instanceof Error) {
+        // Check for common API key errors
+        if (error.message.includes('401') || error.message.includes('403')) {
+          errorMessage = "Invalid API key. Please check your Claude API key and try again.";
+        } else if (error.message.includes('429')) {
+          errorMessage = "Rate limit exceeded. Please wait a moment and try again.";
+        } else if (error.message.includes('Failed to fetch')) {
+          errorMessage = "Network error. Please check your internet connection and try again.";
+        }
+        
+        // Display more detailed error message for debugging
+        setError(errorMessage);
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
       setIsTyping(false);
@@ -134,7 +156,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   const handleApiKeySubmit = () => {
     if (apiKey.trim()) {
+      if (!apiKey.startsWith('sk-ant-')) {
+        toast.error("Please enter a valid Claude API key (should start with 'sk-ant-')");
+        return;
+      }
+      
       setShowApiInput(false);
+      setError(null);
       toast.success("API key saved!");
     } else {
       toast.error("Please enter a valid API key");
@@ -163,7 +191,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           <div className="flex gap-2">
             <Input
               type="password"
-              placeholder="Enter your Claude API key"
+              placeholder="Enter your Claude API key (starts with sk-ant-)"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               className="bg-space-blue border-space-purple/30"
@@ -176,6 +204,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">Your API key is stored locally in your browser and never sent to our servers.</p>
+          <p className="text-xs text-muted-foreground">Get your API key from <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer" className="text-space-teal hover:underline">console.anthropic.com</a>.</p>
         </div>
       ) : (
         <Button 
@@ -210,6 +239,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <Loader2 className="h-4 w-4 animate-spin" />
             <span>Thinking...</span>
           </div>
+        )}
+
+        {error && (
+          <Alert variant="destructive" className="mt-2 bg-red-900/20 border-red-500/50">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="ml-2">
+              {error}
+            </AlertDescription>
+          </Alert>
         )}
       </div>
       
