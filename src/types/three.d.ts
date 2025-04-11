@@ -35,7 +35,12 @@ declare module 'three' {
     constructor(geometry: any, material: any);
     position: Vector3;
     rotation: {x: number, y: number, z: number};
-    scale: {x: number, y: number, z: number};
+    scale: {
+      x: number, 
+      y: number, 
+      z: number,
+      set(x: number, y: number, z: number): void;
+    };
     geometry: any;
     material: Material;
   }
