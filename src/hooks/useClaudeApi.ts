@@ -73,6 +73,11 @@ export const useClaudeApi = ({ apiKey, character }: UseClaudeApiProps) => {
         content: userInput
       });
       
+      // Check for internet connectivity before making API request
+      if (!navigator.onLine) {
+        throw new Error("You appear to be offline. Please check your internet connection and try again.");
+      }
+      
       // Make API request to Claude
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -119,7 +124,9 @@ export const useClaudeApi = ({ apiKey, character }: UseClaudeApiProps) => {
         } else if (error.message.includes('429')) {
           errorMessage = "Rate limit exceeded. Please wait a moment and try again.";
         } else if (error.message.includes('Failed to fetch')) {
-          errorMessage = "Network error. Please check your internet connection and try again.";
+          errorMessage = "Network error: Unable to connect to the Claude API. Please check your internet connection or try again later.";
+        } else if (error.message.includes('offline')) {
+          errorMessage = error.message;
         }
         
         // Display more detailed error message for debugging

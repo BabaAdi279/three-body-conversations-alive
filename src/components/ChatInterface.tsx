@@ -5,6 +5,7 @@ import { useClaudeApi } from '@/hooks/useClaudeApi';
 import ChatMessages from './ChatMessages';
 import ChatInput from './ChatInput';
 import ApiKeyInput from './ApiKeyInput';
+import { Wifi, WifiOff } from "lucide-react";
 
 interface ChatInterfaceProps {
   character: string;
@@ -22,6 +23,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   setApiKey
 }) => {
   const [showApiInput, setShowApiInput] = useState(!apiKey);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   
   const { 
     messages, 
@@ -33,6 +35,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     apiKey, 
     character 
   });
+
+  // Track online status
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   // Initialize chat with character's initial message
   useEffect(() => {
@@ -47,21 +63,37 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   return (
     <div className="flex flex-col h-full">
+      <div className="flex justify-between items-center mb-4">
+        {isOnline ? (
+          <div className="flex items-center text-green-500 text-xs">
+            <Wifi size={16} className="mr-1" />
+            <span>Connected</span>
+          </div>
+        ) : (
+          <div className="flex items-center text-red-500 text-xs">
+            <WifiOff size={16} className="mr-1" />
+            <span>Offline - Check connection</span>
+          </div>
+        )}
+        
+        {!showApiInput && (
+          <Button 
+            variant="outline" 
+            className="text-xs border-space-purple/30 self-end" 
+            onClick={() => setShowApiInput(true)}
+          >
+            Change API Key
+          </Button>
+        )}
+      </div>
+      
       {showApiInput ? (
         <ApiKeyInput 
           apiKey={apiKey} 
           setApiKey={setApiKey} 
           onApiKeySubmit={handleApiKeySubmit} 
         />
-      ) : (
-        <Button 
-          variant="outline" 
-          className="mb-4 text-xs border-space-purple/30 self-end" 
-          onClick={() => setShowApiInput(true)}
-        >
-          Change API Key
-        </Button>
-      )}
+      ) : null}
       
       <ChatMessages 
         messages={messages} 
@@ -71,10 +103,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       
       <ChatInput 
         onSendMessage={sendMessage} 
-        disabled={!apiKey} 
+        disabled={!apiKey || !isOnline} 
         isTyping={isTyping} 
         setIsTyping={setIsTyping}
-        placeholder={`Ask ${character} a question...`}
+        placeholder={isOnline ? `Ask ${character} a question...` : "You're offline. Reconnect to continue..."}
       />
     </div>
   );
